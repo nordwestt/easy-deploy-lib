@@ -1,0 +1,19 @@
+[project]
+name = "easydeploy-lib"
+version = "0.1.0"
+description = "Shared Bash infrastructure for easy deploy product repositories"
+readme = "README.md"
+requires-python = ">=3.10"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q --tb=short"
+markers = [
+    "integration: invokes bash against copied lib scripts",
+]
