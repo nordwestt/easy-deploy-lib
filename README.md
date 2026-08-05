@@ -67,6 +67,27 @@ Return 1 from the override to fall back to built-in mappings in `lib/deps.sh`.
 
 Tag releases as `v0.1.0`, etc. Product repos pin the submodule commit and bump in dedicated commits.
 
+Tag releases as `v0.1.0`, etc. Product repos pin the submodule commit and bump in dedicated commits.
+
+## Pinning a new lib commit in a product repo
+
+The submodule pointer is updated **inside** the submodule checkout, not with `git merge` on the product repo.
+
+```bash
+# From the standalone easydeploy-lib repo (after your commit):
+LIB_SHA=$(git rev-parse HEAD)
+
+# In matrix-easy-deploy or opencloud-easy-deploy:
+cd easydeploy-lib
+git fetch origin main   # or: git fetch ../easydeploy-lib main when using a local sibling clone
+git checkout "$LIB_SHA"
+cd ..
+git add easydeploy-lib
+git commit -m "chore: bump easydeploy-lib"
+```
+
+If `git checkout "$LIB_SHA"` fails with `unable to read tree`, the nested `easydeploy-lib` clone does not have that commit yet — run `git fetch` in `easydeploy-lib/` first.
+
 ## Release archives
 
 When building source tarballs, initialize submodules first:

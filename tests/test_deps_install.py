@@ -142,7 +142,7 @@ class EasydeployLibDepsTest(unittest.TestCase):
             self._write_executable(fake_bin / "rm", "#!/bin/bash\nexec /bin/rm \"$@\"\n")
 
             env = os.environ.copy()
-            env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+            env["PATH"] = str(fake_bin)
             env["EVENTS"] = str(events)
             env["STATE"] = str(state_dir)
             env["FAKE_BIN"] = str(fake_bin)
@@ -158,9 +158,11 @@ class EasydeployLibDepsTest(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, msg=result.stderr)
             lines = events.read_text().splitlines()
-            self.assertTrue(any(line == "apt-get:update" for line in lines))
+            events_dump = "\n".join(lines) if lines else "(empty)"
+            self.assertTrue(any(line == "apt-get:update" for line in lines), msg=events_dump)
             self.assertTrue(
-                any(line == "apt-get:install -y borgbackup borgmatic age" for line in lines)
+                any(line == "apt-get:install -y borgbackup borgmatic age" for line in lines),
+                msg=events_dump,
             )
             self.assertTrue(any(line.startswith("curl:-fsSL https://get.docker.com -o ") for line in lines))
             self.assertIn("systemctl:enable --now docker", lines)
