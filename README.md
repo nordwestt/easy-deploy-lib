@@ -69,6 +69,14 @@ Tag releases as `v0.1.0`, etc. Product repos pin the submodule commit and bump i
 
 Tag releases as `v0.1.0`, etc. Product repos pin the submodule commit and bump in dedicated commits.
 
+Optional (recommended for this repo):
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The `prepare-commit-msg` hook removes `Co-authored-by:` lines from commit messages.
+
 ## Pinning a new lib commit in a product repo
 
 The submodule pointer is updated **inside** the submodule checkout, not with `git merge` on the product repo.
@@ -80,11 +88,20 @@ LIB_SHA=$(git rev-parse HEAD)
 # In matrix-easy-deploy or opencloud-easy-deploy:
 cd easydeploy-lib
 git fetch origin main   # or: git fetch ../easydeploy-lib main when using a local sibling clone
-git checkout "$LIB_SHA"
+git checkout "$LIB_SHA"    # prefer: git checkout main after fetch if main points at the release
 cd ..
 git add easydeploy-lib
 git commit -m "chore: bump easydeploy-lib"
 ```
+
+After `git checkout "$LIB_SHA"`, the submodule may show **detached HEAD**. That is normal when the parent pins a specific commit. To work on `main` inside the submodule while staying at that commit:
+
+```bash
+cd easydeploy-lib
+git checkout main        # only if main is at the same commit as the pin
+```
+
+If `main` is behind, run `git fetch` and `git merge --ff-only origin/main` (or reset `main` to the pinned SHA: `git branch -f main HEAD && git checkout main`).
 
 If `git checkout "$LIB_SHA"` fails with `unable to read tree`, the nested `easydeploy-lib` clone does not have that commit yet — run `git fetch` in `easydeploy-lib/` first.
 
