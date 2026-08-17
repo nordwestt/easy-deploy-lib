@@ -168,6 +168,57 @@ class EasydeployLibDepsTest(unittest.TestCase):
             self.assertIn("systemctl:enable --now docker", lines)
             self.assertIn("All dependencies satisfied.", result.stdout)
 
+    def _stage_lib(self, root: Path) -> None:
+        self._copy_tree(self.repo_root / "lib", root / "easydeploy-lib/lib")
+        (root / "easydeploy-lib/lib/init.sh").write_text(
+            (self.repo_root / "lib/init.sh").read_text()
+        )
+
+    def test_default_required_deps_include_backup_tools(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._stage_lib(root)
+            result = subprocess.run(
+                [
+                    "/bin/bash",
+                    "-c",
+                    'source easydeploy-lib/lib/init.sh && required_dependency_keys',
+                ],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            keys = [line for line in result.stdout.splitlines() if line.strip()]
+            for dep in ("docker", "python3", "borg", "borgmatic", "age"):
+                self.assertIn(dep, keys)
+
+    def test_product_hook_adds_to_defaults_instead_of_replacing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._stage_lib(root)
+            result = subprocess.run(
+                [
+                    "/bin/bash",
+                    "-c",
+                    "easydeploy_required_deps() { printf '%s\\n' git; }\n"
+                    "source easydeploy-lib/lib/init.sh\n"
+                    "required_dependency_keys\n",
+                ],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            keys = [line for line in result.stdout.splitlines() if line.strip()]
+            self.assertIn("git", keys)
+            self.assertIn("borg", keys)
+            self.assertIn("borgmatic", keys)
+            self.assertIn("age", keys)
+            self.assertEqual(len(keys), len(set(keys)))
+
 
 if __name__ == "__main__":
     unittest.main()

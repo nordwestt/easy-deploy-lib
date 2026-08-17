@@ -41,11 +41,13 @@ git clone --recurse-submodules <product-repo-url>
 
 ## Product hooks
 
-Define in `scripts/deps_config.sh`:
+Defaults (always installed): `docker`, `docker-compose`, `openssl`, `curl`, `python3`, `borg`, `borgmatic`, `age`.
+
+Define extra keys in `scripts/deps_config.sh` — they are **added** to the defaults, not replaced:
 
 ```bash
 easydeploy_required_deps() {
-    printf '%s\n' docker docker-compose openssl curl python3
+    printf '%s\n' git
 }
 ```
 

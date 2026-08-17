@@ -1,12 +1,26 @@
 #!/usr/bin/env bash
 # lib/deps.sh — dependency check and install framework (easydeploy-lib)
 
+# Host tools every Easy Deploy kit needs. Product repos may add more via
+# easydeploy_required_deps (union, not replace).
+easydeploy_default_required_deps() {
+    printf '%s\n' docker docker-compose openssl curl python3 borg borgmatic age
+}
+
 required_dependency_keys() {
-    if declare -F easydeploy_required_deps &>/dev/null; then
-        easydeploy_required_deps
-        return 0
-    fi
-    printf '%s\n' docker docker-compose openssl curl python3
+    local -A seen=()
+    local dep
+    while IFS= read -r dep; do
+        [[ -z "$dep" ]] && continue
+        [[ -n "${seen[$dep]:-}" ]] && continue
+        seen[$dep]=1
+        printf '%s\n' "$dep"
+    done < <(
+        easydeploy_default_required_deps
+        if declare -F easydeploy_required_deps &>/dev/null; then
+            easydeploy_required_deps
+        fi
+    )
 }
 
 is_dependency_missing() {
@@ -172,7 +186,7 @@ ensure_dependencies_installed() {
 
     if [[ ${#missing[@]} -gt 0 ]]; then
         local manager
-        manager="$(detect_supported_package_manager)" || die "No supported package manager found. Install docker, docker compose, openssl, curl, and python3 manually."
+        manager="$(detect_supported_package_manager)" || die "No supported package manager found. Install docker, docker compose, openssl, curl, python3, borg, borgmatic, and age manually."
         install_missing_dependencies "$manager" "${missing[@]}"
     else
         success "All required packages are already present."
