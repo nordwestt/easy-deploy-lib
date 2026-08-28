@@ -101,7 +101,7 @@ ensure_docker_and_compose() {
         if ! docker_usable; then
             if [[ "${EUID}" -ne 0 ]] && ! groups | grep -q '\bdocker\b'; then
                 warn "Your user is not in the docker group — log out/in after:"
-                warn "  sudo usermod -aG docker ${USER}"
+                warn "  sudo usermod -aG docker $(id -un)"
             fi
             ensure_docker_daemon_running
         else
@@ -138,4 +138,61 @@ wait_for_url() {
     done
     echo
     success "${label} is up."
+}
+
+_docker_info_permission_denied() {
+    local out
+    out="$(docker info 2>&1)" || true
+    grep -qiE 'permission denied|dial unix /var/run/docker.sock' <<<"$out"
+}
+
+_docker_group_has_user() {
+    local user="$1"
+    local members
+    members="$(getent group docker 2>/dev/null | cut -d: -f4 || true)"
+    [[ -n "$members" ]] || return 1
+    case ",${members}," in
+        *",${user},"*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# If Docker is installed but this session cannot use the socket, add the
+# invoking user to the docker group and re-exec via `sg docker`.
+# Call as: ensure_docker_group_session "$@"  (before consuming argv).
+ensure_docker_group_session() {
+    local user script bash_bin
+    local args=("$@")
+
+    [[ "${EASYDEPLOY_SKIP_DOCKER_GROUP:-}" == "1" ]] && return 0
+    [[ "${EUID:-$(id -u)}" -eq 0 ]] && return 0
+    command -v docker &>/dev/null || return 0
+    docker_usable && return 0
+    _docker_info_permission_denied || return 0
+
+    user="$(id -un)"
+    if ! getent group docker >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if ! _docker_group_has_user "$user"; then
+        info "Adding ${user} to the docker group so Compose can use the daemon without a root shell."
+        run_as_root usermod -aG docker "$user"
+    fi
+
+    if docker_usable; then
+        return 0
+    fi
+
+    if [[ "${EASYDEPLOY_DOCKER_SG:-}" == "1" ]]; then
+        warn "Docker group membership is not active in this session. Log out and back in, then re-run."
+        return 0
+    fi
+
+    command -v sg &>/dev/null || return 0
+    bash_bin="$(command -v bash)"
+    script="$0"
+    info "Activating docker group membership for this session…"
+    export EASYDEPLOY_DOCKER_SG=1
+    exec sg docker -c "export EASYDEPLOY_DOCKER_SG=1; $(printf '%q ' "$bash_bin" "$script" "${args[@]}")"
 }

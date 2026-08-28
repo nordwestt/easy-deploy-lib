@@ -210,7 +210,12 @@ check_dependencies() {
     info "Checking dependencies…"
 
     if ! is_dependency_missing "docker" && ! docker info &>/dev/null 2>&1; then
-        die "Docker is installed but the daemon isn't running (or you need sudo). Please start Docker and re-run."
+        if _docker_info_permission_denied; then
+            ensure_docker_group_session "$@"
+        fi
+        if ! docker info &>/dev/null 2>&1; then
+            die "Docker is installed but the daemon isn't running (or this user cannot use it). Start Docker, or add $(id -un) to the docker group and re-run — no root shell required."
+        fi
     fi
 
     local missing=()

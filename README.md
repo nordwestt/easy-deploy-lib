@@ -29,15 +29,17 @@ git clone --recurse-submodules <product-repo-url>
 | File | Purpose |
 |------|---------|
 | `lib/core.sh` | Colors, logging, `die` |
-| `lib/env.sh` | Safe `.env` loading |
+| `lib/env.sh` | Safe `.env` loading; strip parent `uv`/venv for nested kit apply |
 | `lib/prompt.sh` | Interactive `ask` helpers |
 | `lib/secrets.sh` | `generate_secret` |
 | `lib/template.sh` | `{{KEY}}` template rendering |
 | `lib/domain.sh` | Base domain from FQDN |
-| `lib/docker.sh` | Compose helper, networks/volumes, Docker install |
+| `lib/docker.sh` | Compose helper, networks/volumes, Docker install, docker-group session |
+| `lib/fs.sh` | `/var/lib/<service>` defaults; sudo mkdir + chown to invoking uid:gid |
 | `lib/pkgman.sh` | OS package manager detection and installs |
 | `lib/deps.sh` | Dependency check/install framework |
 | `lib/init.sh` | Sources all modules above |
+| `python/hostfs.py` | Same data-dir helper for kit `apply.py` |
 
 ## Product hooks
 

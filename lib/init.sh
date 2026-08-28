@@ -23,6 +23,8 @@ source "${EASYDEPLOY_LIB}/lib/template.sh"
 source "${EASYDEPLOY_LIB}/lib/domain.sh"
 # shellcheck source=lib/pkgman.sh
 source "${EASYDEPLOY_LIB}/lib/pkgman.sh"
+# shellcheck source=lib/fs.sh
+source "${EASYDEPLOY_LIB}/lib/fs.sh"
 # shellcheck source=lib/docker.sh
 source "${EASYDEPLOY_LIB}/lib/docker.sh"
 # shellcheck source=lib/deps.sh
