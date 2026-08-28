@@ -109,7 +109,7 @@ class EasydeployLibFsTest(unittest.TestCase):
             lines = events.read_text().splitlines()
             self.assertTrue(any(line.startswith("sudo:mkdir -p ") for line in lines), msg=lines)
             self.assertTrue(
-                any(line.startswith(f"sudo:chown {os.getuid()}:{os.getgid()} ") for line in lines),
+                any(line.startswith(f"sudo:chown -R {os.getuid()}:{os.getgid()} ") for line in lines),
                 msg=lines,
             )
             self.assertFalse(any("debian" in line.lower() for line in lines))
