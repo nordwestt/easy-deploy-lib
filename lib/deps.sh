@@ -51,17 +51,30 @@ is_dependency_missing() {
     esac
 }
 
+find_missing_dependencies() {
+    local -n _missing_ref=$1
+    _missing_ref=()
+
+    # Always check docker explicitly so install and verify stay aligned even when
+    # a product deps hook omits it from required_dependency_keys.
+    if is_dependency_missing "docker"; then
+        _missing_ref+=("docker")
+    fi
+
+    local dep
+    while IFS= read -r dep; do
+        [[ -z "$dep" ]] && continue
+        [[ "$dep" == "docker" ]] && continue
+        if is_dependency_missing "$dep"; then
+            _missing_ref+=("$dep")
+        fi
+    done < <(required_dependency_keys)
+}
+
 collect_missing_dependencies() {
     local output_var="$1"
     local missing=()
-    local dep
-
-    while IFS= read -r dep; do
-        [[ -z "$dep" ]] && continue
-        if is_dependency_missing "$dep"; then
-            missing+=("$dep")
-        fi
-    done < <(required_dependency_keys)
+    find_missing_dependencies missing
 
     local joined_missing=""
     if [[ ${#missing[@]} -gt 0 ]]; then
@@ -176,17 +189,14 @@ install_missing_dependencies() {
 ensure_dependencies_installed() {
     info "Ensuring required dependencies are installed…"
 
-    local missing_text
-    collect_missing_dependencies missing_text
+    local manager
+    manager="$(detect_supported_package_manager)" \
+        || die "No supported package manager found. Install docker, docker compose, openssl, curl, python3, borg, borgmatic, and age manually."
 
     local missing=()
-    if [[ -n "$missing_text" ]]; then
-        IFS=' ' read -r -a missing <<< "$missing_text"
-    fi
+    find_missing_dependencies missing
 
     if [[ ${#missing[@]} -gt 0 ]]; then
-        local manager
-        manager="$(detect_supported_package_manager)" || die "No supported package manager found. Install docker, docker compose, openssl, curl, python3, borg, borgmatic, and age manually."
         install_missing_dependencies "$manager" "${missing[@]}"
     else
         success "All required packages are already present."
@@ -199,23 +209,26 @@ ensure_dependencies_installed() {
 check_dependencies() {
     info "Checking dependencies…"
 
-    local missing=()
-
-    if is_dependency_missing "docker"; then
-        missing+=("docker")
-    elif ! docker info &>/dev/null 2>&1; then
+    if ! is_dependency_missing "docker" && ! docker info &>/dev/null 2>&1; then
         die "Docker is installed but the daemon isn't running (or you need sudo). Please start Docker and re-run."
     fi
 
-    local dep
-    while IFS= read -r dep; do
-        [[ "$dep" == "docker" ]] && continue
-        if is_dependency_missing "$dep"; then
-            missing+=("$dep")
-        fi
-    done < <(required_dependency_keys)
+    local missing=()
+    find_missing_dependencies missing
 
     if [[ ${#missing[@]} -gt 0 ]]; then
+        if [[ "${EASYDEPLOY_DEPS_AUTO_INSTALL:-1}" == "1" ]]; then
+            local manager
+            if manager="$(detect_supported_package_manager)"; then
+                EASYDEPLOY_DEPS_AUTO_INSTALL=0
+                warn "Missing required tools; installing: ${missing[*]}"
+                install_missing_dependencies "$manager" "${missing[@]}"
+                ensure_docker_daemon_running
+                check_dependencies
+                return
+            fi
+        fi
+
         error "The following required tools are missing:"
         for dep in "${missing[@]}"; do
             echo -e "    ${RED}•${RESET} ${dep}"
