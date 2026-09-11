@@ -297,14 +297,16 @@ def main(argv: list[str] | None = None) -> int:
                 {
                     "service": plan["service"],
                     "archive_prefix": plan["archive_prefix"],
+                    "timer_name": plan["timer_name"],
                     "state_dir": plan["state_dir"],
+
                     "secrets_file": plan["secrets_file"],
                     "hooks": plan["hooks"],
                     "persistent_paths": payload_entries(plan),
                     "databases": plan["databases"],
                     "volumes": plan["docker_volumes"],
                     "legacy_persistent_paths": plan["legacy_persistent_paths"],
-            }
+                }
             )
         )
         return 0
@@ -334,7 +336,10 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(manifest, indent=2))
         return 0
 
-    print("Nothing to do: pass --emit-plan-json, --write-manifest, or --read-manifest", file=sys.stderr)
+    print(
+        "Nothing to do: pass --emit-plan-json, --write-manifest, or --read-manifest",
+        file=sys.stderr,
+    )
     return 2
 
 
