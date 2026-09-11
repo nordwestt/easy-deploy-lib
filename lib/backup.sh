@@ -307,18 +307,29 @@ easydeploy_backup_stage_payload() {
 
     easydeploy_backup_py "${EASYDEPLOY_LIB}/python/backup_plan.py" \
         --project-root "${project_root}" --emit-plan-json > "${plan_json}"
-
-    EASYDEPLOY_LIB_PYTHON="$(easydeploy_backup_lib_python)" \
-        "${EASYDEPLOY_BACKUP_PYTHON}" - "${project_root}" "${payload_dir}" "${plan_json}" <<'PY'
+    local stage_script stage_error
+    stage_script="$(mktemp)"
+    stage_error="$(mktemp)"
+    cat > "${stage_script}" <<'PY'
 import json
 import shutil
-import subprocess
+import stat
 import sys
 from pathlib import Path
 
 project_root, payload_dir, plan_json_path = sys.argv[1], sys.argv[2], sys.argv[3]
 plan = json.loads(Path(plan_json_path).read_text())
 root = Path(project_root)
+def ignore_entries(directory, names):
+    ignored = {"backup"} if "backup" in names else set()
+    for name in names:
+        try:
+            if stat.S_ISSOCK((Path(directory) / name).stat().st_mode):
+                ignored.add(name)
+                print(f"WARN: skipping runtime socket: {Path(directory) / name}", file=sys.stderr)
+        except OSError:
+            pass
+    return ignored
 
 for entry in plan["persistent_paths"]:
     src = Path(entry["path"]) if entry["path"].startswith("/") else root / entry["path"]
@@ -326,22 +337,33 @@ for entry in plan["persistent_paths"]:
     if not src.exists():
         print(f"WARN: backup path missing, skipping: {entry['path']}", file=sys.stderr)
         continue
+    if stat.S_ISSOCK(src.stat().st_mode):
+        print(f"WARN: skipping runtime socket: {entry['path']}", file=sys.stderr)
+        continue
     if src.is_dir():
-        # The staging root may live inside a staged dir (state_dir/backup/...) —
-        # never recurse into it.
-        shutil.copytree(
-            src,
-            dest,
-            ignore=shutil.ignore_patterns("backup"),
-            dirs_exist_ok=True,
-        )
+        shutil.copytree(src, dest, ignore=ignore_entries, dirs_exist_ok=True)
     else:
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dest)
     print(f"staged:{entry['as']}")
 PY
 
-    easydeploy_backup_dump_databases "${project_root}" "${payload_dir}" "${plan_json}"
+    if EASYDEPLOY_LIB_PYTHON="$(easydeploy_backup_lib_python)" \
+        "${EASYDEPLOY_BACKUP_PYTHON}" "${stage_script}" "${project_root}" "${payload_dir}" "${plan_json}" 2>"${stage_error}"; then
+        cat "${stage_error}" >&2
+    elif grep -q "Permission denied" "${stage_error}"; then
+        warn "Protected backup data detected; retrying file staging with sudo..."
+        rm -rf "${payload_dir}/files"
+        mkdir -p "${payload_dir}/files"
+        rm -f "${stage_error}"
+        run_as_root "${EASYDEPLOY_BACKUP_PYTHON}" "${stage_script}" "${project_root}" "${payload_dir}" "${plan_json}"
+        run_as_root chown -R "$(id -u):$(id -g)" "${staging_current}"
+    else
+        cat "${stage_error}" >&2
+        rm -f "${stage_script}" "${stage_error}" "${plan_json}"
+        return 1
+    fi
+    rm -f "${stage_script}" "${stage_error}"
 
     local volume
     while IFS= read -r volume; do
