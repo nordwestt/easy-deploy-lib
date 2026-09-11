@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Shared Bash infrastructure for easy deploy product repositories"
 readme = "README.md"
 requires-python = ">=3.10"
-
+dependencies = [
+    "pyyaml>=6.0",
+]
 [dependency-groups]
 dev = [
     "pytest>=8.0",

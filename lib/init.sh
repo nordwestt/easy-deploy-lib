@@ -27,5 +27,7 @@ source "${EASYDEPLOY_LIB}/lib/pkgman.sh"
 source "${EASYDEPLOY_LIB}/lib/fs.sh"
 # shellcheck source=lib/docker.sh
 source "${EASYDEPLOY_LIB}/lib/docker.sh"
+# shellcheck source=lib/backup.sh
+source "${EASYDEPLOY_LIB}/lib/backup.sh"
 # shellcheck source=lib/deps.sh
 source "${EASYDEPLOY_LIB}/lib/deps.sh"
