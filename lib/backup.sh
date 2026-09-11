@@ -279,7 +279,7 @@ easydeploy_backup_stage_payload() {
 
     local plan_json
     plan_json="$(mktemp)"
-    trap 'rm -f "${plan_json}"' RETURN
+    trap 'rm -f "${plan_json:-}"' RETURN
 
     easydeploy_backup_py "${EASYDEPLOY_LIB}/python/backup_plan.py" \
         --project-root "${project_root}" --emit-plan-json > "${plan_json}"
