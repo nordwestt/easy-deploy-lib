@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -61,6 +62,66 @@ def _write_if_changed(path: Path, content: str) -> bool:
     return True
 
 
+def _requires_privilege(unit_dir: Path) -> bool:
+    """Whether writing/removing units in unit_dir needs sudo."""
+    if os.geteuid() == 0:
+        return False
+    if unit_dir.exists():
+        return not os.access(unit_dir, os.W_OK)
+    return not os.access(unit_dir.parent, os.W_OK)
+
+
+def _run_systemctl(
+    run_command,
+    args: list[str],
+    *,
+    privileged: bool,
+    check: bool,
+) -> None:
+    command = ["systemctl", *args]
+    if privileged:
+        if not shutil.which("sudo"):
+            raise RuntimeError(
+                "Installing automatic backup timers requires sudo when run as a non-root user"
+            )
+        command.insert(0, "sudo")
+    run_command(command, check=check)
+
+
+def _install_unit(path: Path, content: str, *, privileged: bool) -> bool:
+    if not privileged:
+        return _write_if_changed(path, content)
+
+    # Compare through a privileged read only when the destination exists.
+    if path.exists():
+        try:
+            if path.read_text() == content:
+                return False
+        except PermissionError:
+            pass
+
+    import tempfile
+
+    with tempfile.NamedTemporaryFile("w", delete=False) as temporary:
+        temporary.write(content)
+        source = Path(temporary.name)
+    try:
+        subprocess.run(
+            ["sudo", "install", "-m", "0644", str(source), str(path)],
+            check=True,
+        )
+    finally:
+        source.unlink(missing_ok=True)
+    return True
+
+
+def _remove_unit(path: Path, *, privileged: bool) -> None:
+    if not privileged:
+        path.unlink()
+        return
+    subprocess.run(["sudo", "rm", "-f", str(path)], check=True)
+
+
 def systemd_available(run_command=subprocess.run) -> bool:
     if not Path("/run/systemd/system").exists():
         return False
@@ -90,17 +151,25 @@ def reconcile(
 
         try:
             unit_dir.mkdir(parents=True, exist_ok=True)
-            service_changed = _write_if_changed(
+            privileged = _requires_privilege(unit_dir)
+            service_changed = _install_unit(
                 service_path,
                 render_service(unit_name, project_root, f"{unit_name} automatic backup"),
+                privileged=privileged,
             )
-            timer_changed = _write_if_changed(
+            timer_changed = _install_unit(
                 timer_path,
                 render_timer(unit_name, schedule["calendar"], schedule["persistent"]),
+                privileged=privileged,
             )
 
-            run_command(["systemctl", "daemon-reload"], check=True)
-            run_command(["systemctl", "enable", "--now", f"{unit_name}.timer"], check=True)
+            _run_systemctl(run_command, ["daemon-reload"], privileged=privileged, check=True)
+            _run_systemctl(
+                run_command,
+                ["enable", "--now", f"{unit_name}.timer"],
+                privileged=privileged,
+                check=True,
+            )
         except (OSError, subprocess.CalledProcessError) as exc:
             raise RuntimeError(f"Failed to install automatic backup timer: {exc}") from exc
 
@@ -113,12 +182,18 @@ def reconcile(
             raise RuntimeError("Cannot remove automatic backup timer because systemd is unavailable")
 
         try:
-            run_command(["systemctl", "disable", "--now", f"{unit_name}.timer"], check=False)
+            privileged = _requires_privilege(unit_dir)
+            _run_systemctl(
+                run_command,
+                ["disable", "--now", f"{unit_name}.timer"],
+                privileged=privileged,
+                check=False,
+            )
             if timer_path.exists():
-                timer_path.unlink()
+                _remove_unit(timer_path, privileged=privileged)
             if service_path.exists():
-                service_path.unlink()
-            run_command(["systemctl", "daemon-reload"], check=True)
+                _remove_unit(service_path, privileged=privileged)
+            _run_systemctl(run_command, ["daemon-reload"], privileged=privileged, check=True)
         except (OSError, subprocess.CalledProcessError) as exc:
             raise RuntimeError(f"Failed to remove automatic backup timer: {exc}") from exc
         return "Automatic backup timer removed."
