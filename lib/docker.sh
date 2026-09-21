@@ -133,10 +133,14 @@ wait_for_url() {
         if [[ $attempt -ge $max_attempts ]]; then
             die "Timed out waiting for ${label} at ${url}"
         fi
-        echo -ne "    attempt ${attempt}/${max_attempts}…\r"
+        if ! easydeploy_quiet; then
+            echo -ne "    attempt ${attempt}/${max_attempts}…\r"
+        fi
         sleep "$sleep_secs"
     done
-    echo
+    if ! easydeploy_quiet; then
+        echo
+    fi
     success "${label} is up."
 }
 
