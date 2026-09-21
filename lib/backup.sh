@@ -100,26 +100,24 @@ easydeploy_backup_repo_env() {
 # -------------------------------------------------------------- borgmatic ---
 
 # Ensure a local repository exists and is writable by the invoking user.
+# Default paths live under /var/backups, which is typically root-owned — the
+# same sudo mkdir + chown path used for /var/lib data dirs.
 easydeploy_backup_prepare_local_repo() {
     [[ "${BACKUP_REPO_TYPE:-}" == "local" ]] || return 0
 
     local repo_path="${BACKUP_REPO_PATH:-}"
     [[ -n "${repo_path}" ]] || die "BACKUP_REPO_PATH is required for a local repository."
 
-    if mkdir -p "${repo_path}" 2>/dev/null &&
-        [[ -w "${repo_path}" ]] &&
-        { [[ ! -e "${repo_path}/config" ]] || [[ -w "${repo_path}/config" ]]; }; then
-        return 0
+    ensure_writable_directory "${repo_path}"
+
+    if [[ -e "${repo_path}/config" ]] && [[ ! -w "${repo_path}/config" ]]; then
+        info "Taking ownership of local Borg repository ${repo_path}..."
+        run_as_root chown -R "$(id -u):$(id -g)" "${repo_path}"
+        [[ -w "${repo_path}/config" ]] ||
+            die "Local Borg repository is not writable after ownership change: ${repo_path}"
     fi
 
-    command -v sudo >/dev/null 2>&1 ||
-        die "Cannot write to local Borg repository ${repo_path}. Create it and grant ownership to $(id -un), or install sudo."
-
-    info "Preparing local Borg repository ${repo_path} with sudo..."
-    sudo mkdir -p "${repo_path}"
-    sudo chown -R "$(id -u):$(id -g)" "${repo_path}"
-    [[ -w "${repo_path}" ]] ||
-        die "Local Borg repository is not writable after ownership change: ${repo_path}"
+    chmod 700 "${repo_path}" 2>/dev/null || true
 }
 
 easydeploy_backup_write_borgmatic_config() {
