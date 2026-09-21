@@ -40,6 +40,7 @@ git clone --recurse-submodules <product-repo-url>
 | `lib/deps.sh` | Dependency check/install framework |
 | `lib/init.sh` | Sources all modules above |
 | `python/hostfs.py` | Same data-dir helper for kit `apply.py` |
+| `python/update_lock.py` | Per-repo `update.lock` fingerprint (git, config, image IDs) |
 
 ## Product hooks
 
