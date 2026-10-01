@@ -342,7 +342,7 @@ for entry in plan["persistent_paths"]:
         print(f"WARN: skipping runtime socket: {entry['path']}", file=sys.stderr)
         continue
     if src.is_dir():
-        shutil.copytree(src, dest, ignore=ignore_entries, dirs_exist_ok=True)
+        shutil.copytree(src, dest, symlinks=True, ignore=ignore_entries, dirs_exist_ok=True)
     else:
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dest)
@@ -639,11 +639,11 @@ for src, rel in entries:
             if child.name == "backup":
                 continue
             rm(child)
-        shutil.copytree(src, dest, dirs_exist_ok=True)
+        shutil.copytree(src, dest, symlinks=True, dirs_exist_ok=True)
     else:
         dest.parent.mkdir(parents=True, exist_ok=True)
         rm(dest)
-        shutil.copy2(src, dest)
+        shutil.copy2(src, dest, follow_symlinks=False)
     copy_owner(src, dest)
     print(f"restored:{rel}")
 PY
