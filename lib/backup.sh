@@ -315,7 +315,10 @@ import stat
 import sys
 from pathlib import Path
 
-project_root, payload_dir, plan_json_path = sys.argv[1], sys.argv[2], sys.argv[3]
+project_root, payload_dir, plan_json_path, lib_python = sys.argv[1:5]
+sys.path.insert(0, lib_python)
+from hostfs import copy_owner  # noqa: E402
+
 plan = json.loads(Path(plan_json_path).read_text())
 root = Path(project_root)
 def ignore_entries(directory, names):
@@ -343,18 +346,20 @@ for entry in plan["persistent_paths"]:
     else:
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dest)
+    copy_owner(src, dest)
     print(f"staged:{entry['as']}")
 PY
 
-    if EASYDEPLOY_LIB_PYTHON="$(easydeploy_backup_lib_python)" \
-        "${EASYDEPLOY_BACKUP_PYTHON}" "${stage_script}" "${project_root}" "${payload_dir}" "${plan_json}" 2>"${stage_error}"; then
+    local lib_python
+    lib_python="$(easydeploy_backup_lib_python)"
+    if "${EASYDEPLOY_BACKUP_PYTHON}" "${stage_script}" "${project_root}" "${payload_dir}" "${plan_json}" "${lib_python}" 2>"${stage_error}"; then
         cat "${stage_error}" >&2
     elif grep -q "Permission denied" "${stage_error}"; then
         warn "Protected backup data detected; retrying file staging with sudo..."
         rm -rf "${payload_dir}/files"
         mkdir -p "${payload_dir}/files"
         rm -f "${stage_error}"
-        run_as_root "${EASYDEPLOY_BACKUP_PYTHON}" "${stage_script}" "${project_root}" "${payload_dir}" "${plan_json}"
+        run_as_root "${EASYDEPLOY_BACKUP_PYTHON}" "${stage_script}" "${project_root}" "${payload_dir}" "${plan_json}" "${lib_python}"
         run_as_root chown -R "$(id -u):$(id -g)" "${staging_current}"
     else
         cat "${stage_error}" >&2
@@ -596,6 +601,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.environ.get("EASYDEPLOY_LIB_PYTHON", ""))
 from backup_plan import resolve_payload_files  # noqa: E402
+from hostfs import copy_owner  # noqa: E402
 
 phase, project_root, payload_root, plan_json_path = sys.argv[1:5]
 root = Path(project_root)
@@ -638,6 +644,7 @@ for src, rel in entries:
         dest.parent.mkdir(parents=True, exist_ok=True)
         rm(dest)
         shutil.copy2(src, dest)
+    copy_owner(src, dest)
     print(f"restored:{rel}")
 PY
 }

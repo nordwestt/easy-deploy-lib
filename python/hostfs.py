@@ -129,6 +129,41 @@ def chown_path(path: Path | str, uid: int, gid: int) -> None:
     )
 
 
+def _walk_tree(root: Path):
+    yield root
+    if root.is_dir() and not root.is_symlink():
+        for dirpath, dirnames, filenames in os.walk(root):
+            for name in dirnames + filenames:
+                yield Path(dirpath) / name
+
+
+def copy_owner(src: Path | str, dest: Path | str) -> None:
+    """Give each entry under dest the owner of its counterpart under src.
+
+    shutil copies keep modes but not owners, and services read their bind
+    mounts as non-root users. Only root can chown to other users.
+    """
+    if os.geteuid() != 0:
+        return
+    src, dest = Path(src), Path(dest)
+    for source in _walk_tree(src):
+        target = dest / source.relative_to(src)
+        if not os.path.lexists(target):
+            continue
+        st = source.lstat()
+        os.lchown(target, st.st_uid, st.st_gid)
+
+
+def chown_tree(path: Path | str, uid: int, gid: int) -> None:
+    """chown -R path to uid:gid as root, touching only entries that differ."""
+    if os.geteuid() != 0:
+        return
+    for entry in _walk_tree(Path(path)):
+        st = entry.lstat()
+        if (st.st_uid, st.st_gid) != (uid, gid):
+            os.lchown(entry, uid, gid)
+
+
 def ensure_writable_directory(path: Path | str) -> Path:
     """mkdir -p path and prove this process can create files in it."""
     target = Path(path).expanduser()
