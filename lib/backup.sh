@@ -831,7 +831,10 @@ PY
 
 # Restore an extracted payload/ directory into the project. Handles manifest
 # format 3 (files/ layout) and legacy formats 1/2 (flat repo-relative layout).
-# Order: config files -> apply -> volumes -> data files -> databases -> apply.
+# Order: config files -> apply -> stop -> volumes -> data files -> databases -> apply.
+# Apply hooks start services, and data must not be swapped underneath them:
+# processes holding the old files open (slapd's MDB, NATS, SQLite) keep
+# serving pre-restore state and can write it back over the restored files.
 easydeploy_backup_restore_payload() {
     local project_root="$1"
     local payload_root="$2"
@@ -842,10 +845,13 @@ easydeploy_backup_restore_payload() {
 
     easydeploy_backup_warn_version_mismatch "${payload_root}" "${project_root}"
 
-    local apply_hook
+    local apply_hook stop_hook
     apply_hook="$("${EASYDEPLOY_BACKUP_PYTHON}" -c \
         'import json,sys
 print(json.load(open(sys.argv[1])).get("hooks", {}).get("apply", ""))' "${plan_json}")"
+    stop_hook="$("${EASYDEPLOY_BACKUP_PYTHON}" -c \
+        'import json,sys
+print(json.load(open(sys.argv[1])).get("hooks", {}).get("stop", ""))' "${plan_json}")"
 
     info "Restoring configuration files..."
     easydeploy_backup_restore_copy_phase config "${project_root}" "${payload_root}" "${plan_json}"
@@ -853,6 +859,11 @@ print(json.load(open(sys.argv[1])).get("hooks", {}).get("apply", ""))' "${plan_j
     if [[ -n "${apply_hook}" ]]; then
         info "Regenerating runtime artifacts from restored deploy/state..."
         easydeploy_backup_run_hook "${project_root}" "${apply_hook}"
+    fi
+
+    if [[ -n "${stop_hook}" ]]; then
+        info "Stopping services before restoring data..."
+        easydeploy_backup_run_hook "${project_root}" "${stop_hook}"
     fi
 
     easydeploy_backup_import_volumes "${payload_root}" "${plan_json}"
