@@ -183,8 +183,8 @@ easydeploy_backup_export_volume() {
     info "Exporting Docker volume '${volume}'..."
     docker run --rm \
         -v "${volume}:/source:ro" \
-        -v "${target_dir}/backup" \
-        alpine:3 sh -c "mkdir -p /backup && cd /source && tar -cf /backup/${volume}.tar ."
+        -v "${target_dir}:/backup" \
+        alpine:3 sh -c "cd /source && tar -cf /backup/${volume}.tar ."
 }
 
 # Print "name<TAB>value" hook lines from a plan json file.
@@ -362,6 +362,11 @@ PY
         return 1
     fi
     rm -f "${stage_script}" "${stage_error}"
+
+    if ! easydeploy_backup_dump_databases "${project_root}" "${payload_dir}" "${plan_json}"; then
+        rm -f "${plan_json}"
+        return 1
+    fi
 
     local volume
     while IFS= read -r volume; do
